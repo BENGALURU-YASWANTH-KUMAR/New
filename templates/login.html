@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h1 class="text-white text-center" style="font-size: 48px; font-weight: 700; margin-bottom: 30px;">Sign In to Your Account</h1>
+        <form action="/login" method="post" style="max-width: 400px; margin: auto;">
+            <input name="email" type="email" class="form-control input-lg" placeholder="Email" required style="margin-bottom: 15px;">
+            <input name="password" type="password" class="form-control input-lg" placeholder="Password" required style="margin-bottom: 25px;">
+            <button type="submit" class="btn btn-lg btn-warning btn-block" style="font-size: 22px;">Login</button>
+        </form>
+        <div class="text-center" style="margin-top: 15px;">
+            <a href="#" class="text-white" style="font-size: 16px; color: #ffd700; font-weight: 600;">Forgot password?</a>
+        </div>
+        <p class="text-white text-center" style="margin-top: 20px;">Don't have an account? <a href="/signup" style="color: #ffd700; font-weight: 600;">Sign up here</a>.</p>
+    </div>
+</div>
+{% endblock %}

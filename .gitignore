@@ -1,0 +1,20 @@
+﻿# Large data files that cause upload issues
+*.csv
+*.zip
+*.pkl
+*.joblib
+*.dat
+training.1600000.processed.noemoticon.csv
+sentiment140.zip
+stemmed_tweets.csv
+Books.csv
+Ratings.csv
+data.csv
+emotions.csv
+output.csv
+
+# Environment and temp files
+.env
+venv/
+__pycache__/
+.ipynb_checkpoints/
