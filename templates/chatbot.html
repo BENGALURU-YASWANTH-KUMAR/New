@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Universal AI Assistant - Book Recommender</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .chat-container {
+            height: 700px;
+            border: 3px solid #4a90e2;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.98);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+        }
+        
+        .chat-header {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 20px;
+            border-radius: 17px 17px 0 0;
+            text-align: center;
+            position: relative;
+        }
+        
+        .chat-status {
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 12px;
+        }
+        
+        .online-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            background: #00ff00;
+            border-radius: 50%;
+            margin-right: 5px;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .chat-messages {
+            height: 480px;
+            overflow-y: auto;
+            padding: 20px;
+            background: rgba(248, 249, 250, 0.5);
+            margin: 0;
+            border-radius: 0;
+            scroll-behavior: smooth;
+        }
+        
+        .message {
+            margin-bottom: 20px;
+            padding: 15px 20px;
+            border-radius: 25px;
+            max-width: 85%;
+            position: relative;
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .user-message {
+            background: linear-gradient(45deg, #007bff, #0056b3);
+            color: white;
+            margin-left: auto;
+            text-align: right;
+            box-shadow: 0 4px 15px rgba(0,123,255,0.3);
+        }
+        
+        .bot-message {
+            background: linear-gradient(45deg, #f8f9fa, #e9ecef);
+            border: 2px solid #dee2e6;
+            color: #333;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .message-time {
+            font-size: 0.75em;
+            opacity: 0.7;
+            margin-top: 5px;
+        }
+        
+        .typing-indicator {
+            display: none;
+            padding: 15px 20px;
+            font-style: italic;
+            color: #6c757d;
+            background: rgba(108, 117, 125, 0.1);
+            border-radius: 15px;
+            margin: 10px 20px;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .input-area {
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 0 0 17px 17px;
+        }
+        
+        .input-group {
+            border-radius: 25px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        #messageInput {
+            border: none;
+            padding: 15px 20px;
+            font-size: 16px;
+            border-radius: 25px 0 0 25px;
+        }
+        
+        #messageInput:focus {
+            outline: none;
+            box-shadow: none;
+        }
+        
+        #sendBtn {
+            border-radius: 0 25px 25px 0;
+            padding: 15px 25px;
+            background: linear-gradient(45deg, #007bff, #0056b3);
+            border: none;
+            transition: all 0.3s ease;
+        }
+        
+        #sendBtn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,123,255,0.4);
+        }
+        
+        #sendBtn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .suggestion-btn {
+            margin: 5px;
+            font-size: 0.85em;
+            border-radius: 20px;
+            padding: 8px 15px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .suggestion-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        
+        .suggestions-container {
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 10px 0;
+        }
+        
+        .quick-actions {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .action-btn {
+            margin: 5px;
+            border-radius: 20px;
+            padding: 10px 20px;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+        
+        .action-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+        }
+        
+        .stats-container {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: rgba(255,255,255,0.8);
+        }
+        
+        .books-display {
+            background: linear-gradient(45deg, #e3f2fd, #bbdefb);
+            border-radius: 15px;
+            padding: 15px;
+            margin-top: 15px;
+            border-left: 5px solid #2196f3;
+        }
+        
+        .book-item {
+            background: white;
+            padding: 10px;
+            margin: 8px 0;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .message-count {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.7em;
+        }
+        
+        .loading-dots {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            position: relative;
+        }
+        
+        .loading-dots::after {
+            content: '⚡';
+            position: absolute;
+            animation: bounce 1s infinite;
+        }
+        
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        .clear-chat-btn {
+            position: absolute;
+            top: 15px;
+            left: 20px;
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .clear-chat-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .character-count {
+            font-size: 0.75em;
+            color: #6c757d;
+            text-align: right;
+            margin-top: 5px;
+        }
+
+        .error-message {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a52);
+            color: white;
+            border: none;
+        }
+
+        .response-actions {
+            margin-top: 10px;
+            text-align: right;
+        }
+
+        .response-action-btn {
+            background: none;
+            border: none;
+            color: #6c757d;
+            font-size: 0.8em;
+            margin-left: 10px;
+            cursor: pointer;
+            padding: 2px 5px;
+            border-radius: 5px;
+            transition: all 0.3s ease;
+        }
+
+        .response-action-btn:hover {
+            background: rgba(0,0,0,0.1);
+            color: #333;
+        }
+
+        @media (max-width: 768px) {
+            .chat-container {
+                height: 600px;
+                margin: 10px;
+            }
+            
+            .message {
+                max-width: 95%;
+            }
+            
+            .stats-container {
+                flex-direction: column;
+                gap: 5px;
+            }
+            
+            .quick-actions {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row justify-content-center">
+            <div class="col-lg-10 col-md-12">
+                <div class="card shadow-lg border-0 mt-4">
+                    <div class="chat-container">
+                        <!-- Enhanced Chat Header -->
+                        <div class="chat-header">
+                            <button class="clear-chat-btn" onclick="clearChat()">
+                                <i class="fas fa-trash"></i> Clear
+                            </button>
+                            <h2><i class="fas fa-robot"></i> Universal AI Assistant</h2>
+                            <p class="mb-0">Ask me anything! Books, Science, Math, Cooking, History & More!</p>
+                            <div class="chat-status">
+                                <span class="online-indicator"></span>Online
+                            </div>
+                            <div class="stats-container">
+                                <div><i class="fas fa-book"></i> 271K+ Books</div>
+                                <div><i class="fas fa-brain"></i> AI Powered</div>
+                                <div><i class="fas fa-comments"></i> Real-time Chat</div>
+                            </div>
+                            <div class="message-count" id="messageCount">0 messages</div>
+                        </div>
+                        
+                        <!-- Chat Messages -->
+                        <div id="chatMessages" class="chat-messages">
+                            <div class="message bot-message">
+                                <strong><i class="fas fa-robot text-primary"></i> AI Assistant:</strong><br>
+                                🌟 Welcome! I'm your universal AI assistant! I can help you with:
+                                <br><br>
+                                📚 <strong>Books & Literature:</strong> Recommendations, reviews, author info<br>
+                                🧮 <strong>Mathematics:</strong> Calculations, equations, problem solving<br>
+                                🔬 <strong>Science & Technology:</strong> Physics, chemistry, biology, tech trends<br>
+                                🍳 <strong>Cooking & Recipes:</strong> Meal ideas, cooking tips, nutrition<br>
+                                📖 <strong>History & Culture:</strong> Historical facts, cultural insights<br>
+                                💻 <strong>Programming:</strong> Code help, best practices, debugging<br>
+                                🏥 <strong>Health & Wellness:</strong> General health info, fitness tips<br>
+                                ✈️ <strong>Travel & Geography:</strong> Travel advice, country info<br>
+                                🎵 <strong>Arts & Entertainment:</strong> Music, movies, art history<br>
+                                💼 <strong>Business & Finance:</strong> Career advice, financial tips<br><br>
+                                What would you like to explore today? 🚀
+                                <div class="message-time">Just now</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Enhanced Typing Indicator -->
+                        <div id="typingIndicator" class="typing-indicator">
+                            <span class="loading-dots"></span> AI is thinking and preparing your answer...
+                        </div>
+                        
+                        <!-- Enhanced Input Area -->
+                        <div class="input-area">
+                            <div class="input-group">
+                                <input type="text" id="messageInput" class="form-control" 
+                                       placeholder="Ask anything: 'Explain quantum physics', 'Best pizza recipe', 'Books like Harry Potter'..." 
+                                       maxlength="1000">
+                                <button id="sendBtn" class="btn btn-primary">
+                                    <i class="fas fa-paper-plane"></i> Send
+                                </button>
+                            </div>
+                            <div class="character-count" id="charCount">0/1000</div>
+                            <div class="mt-2">
+                                <small class="text-muted">
+                                    <i class="fas fa-lightbulb"></i> Pro tip: Be specific for better answers! Press Enter to send.
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Enhanced Suggestions -->
+                    <div class="quick-actions">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <h6><i class="fas fa-magic"></i> Popular Questions:</h6>
+                                <div id="suggestions" class="suggestions-container"></div>
+                            </div>
+                            <div class="col-md-4">
+                                <h6><i class="fas fa-link"></i> Quick Actions:</h6>
+                                <div class="d-flex flex-wrap">
+                                    <a href="/" class="btn btn-outline-primary action-btn">
+                                        <i class="fas fa-home"></i> Home
+                                    </a>
+                                    <a href="/recommend" class="btn btn-outline-success action-btn">
+                                        <i class="fas fa-book"></i> Books
+                                    </a>
+                                    <a href="/twitter_sentiment" class="btn btn-outline-info action-btn">
+                                        <i class="fas fa-heart"></i> Sentiment
+                                    </a>
+                                    <a href="/popular" class="btn btn-outline-warning action-btn">
+                                        <i class="fas fa-star"></i> Popular
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Enhanced JavaScript -->
+    <script>
+        // DOM Elements
+        const chatMessages = document.getElementById('chatMessages');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const typingIndicator = document.getElementById('typingIndicator');
+        const suggestionsDiv = document.getElementById('suggestions');
+        const messageCount = document.getElementById('messageCount');
+        const charCount = document.getElementById('charCount');
+
+        // State variables
+        let messageCounter = 0;
+        let isTyping = false;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSuggestions();
+            updateMessageCount();
+            messageInput.focus();
+        });
+
+        // Event listeners
+        sendBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        messageInput.addEventListener('input', function() {
+            const length = this.value.length;
+            charCount.textContent = `${length}/1000`;
+            
+            if (length > 950) {
+                charCount.style.color = '#dc3545';
+            } else if (length > 800) {
+                charCount.style.color = '#fd7e14';
+            } else {
+                charCount.style.color = '#6c757d';
+            }
+        });
+
+        // Send message function
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message || isTyping) return;
+
+            // Disable input while processing
+            setInputState(false);
+            
+            // Display user message
+            addMessage(message, 'user');
+            messageInput.value = '';
+            charCount.textContent = '0/1000';
+            charCount.style.color = '#6c757d';
+            
+            // Show typing indicator
+            showTyping(true);
+
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: message })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                // Hide typing indicator
+                showTyping(false);
+                
+                // Display bot response
+                addMessage(data.response, 'bot', data.intent);
+                
+                // Handle special context data
+                if (data.context_data && data.context_data.books && data.context_data.books.length > 0) {
+                    displayBooks(data.context_data.books);
+                }
+                
+            } catch (error) {
+                console.error('Chat error:', error);
+                showTyping(false);
+                addMessage('❌ Sorry, I encountered an error connecting to the server. Please check your internet connection and try again.', 'bot', 'error');
+            } finally {
+                // Re-enable input
+                setInputState(true);
+                messageInput.focus();
+            }
+        }
+
+        // Add message to chat
+        function addMessage(text, sender, intent = null) {
+            const messageDiv = document.createElement('div');
+            const isError = intent === 'error';
+            messageDiv.className = `message ${sender}-message ${isError ? 'error-message' : ''}`;
+            
+            const timestamp = new Date().toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+
+            if (sender === 'user') {
+                messageDiv.innerHTML = `
+                    <strong><i class="fas fa-user"></i> You:</strong><br>
+                    ${escapeHtml(text)}
+                    <div class="message-time">${timestamp}</div>
+                `;
+            } else {
+                messageDiv.innerHTML = `
+                    <strong><i class="fas fa-robot text-primary"></i> AI Assistant:</strong><br>
+                    ${formatBotResponse(text)}
+                    <div class="message-time">${timestamp}</div>
+                    <div class="response-actions">
+                        <button class="response-action-btn" onclick="copyResponse(this)" title="Copy response">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                        <button class="response-action-btn" onclick="likeResponse(this)" title="Like response">
+                            <i class="fas fa-thumbs-up"></i>
+                        </button>
+                    </div>
+                `;
+            }
+            
+            chatMessages.appendChild(messageDiv);
+            scrollToBottom();
+            updateMessageCount();
+        }
+
+        // Format bot response to handle markdown-like formatting
+        function formatBotResponse(text) {
+            return text
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/```(.*?)```/gs, '<code style="background:#f8f9fa; padding:10px; border-radius:5px; display:block; margin:10px 0;">$1</code>')
+                .replace(/`(.*?)`/g, '<code style="background:#f8f9fa; padding:2px 5px; border-radius:3px;">$1</code>')
+                .replace(/\n/g, '<br>');
+        }
+
+        // Escape HTML to prevent XSS
+        function escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // Show/hide typing indicator
+        function showTyping(show) {
+            isTyping = show;
+            typingIndicator.style.display = show ? 'block' : 'none';
+            if (show) {
+                scrollToBottom();
+            }
+        }
+
+        // Set input state (enabled/disabled)
+        function setInputState(enabled) {
+            messageInput.disabled = !enabled;
+            sendBtn.disabled = !enabled;
+            
+            if (enabled) {
+                sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+            } else {
+                sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+            }
+        }
+
+        // Display book recommendations
+        function displayBooks(books) {
+            if (books && books.length > 0) {
+                const booksDiv = document.createElement('div');
+                booksDiv.className = 'books-display';
+                
+                let booksHtml = '<h6><i class="fas fa-book"></i> Book Recommendations:</h6>';
+                books.forEach((book, index) => {
+                    booksHtml += `
+                        <div class="book-item">
+                            <strong>${escapeHtml(book.title)}</strong><br>
+                            <small class="text-muted">by ${escapeHtml(book.author)}</small>
+                        </div>
+                    `;
+                });
+                
+                booksDiv.innerHTML = booksHtml;
+                chatMessages.appendChild(booksDiv);
+                scrollToBottom();
+            }
+        }
+
+        // Load suggestions
+        async function loadSuggestions() {
+            try {
+                const response = await fetch('/chat_suggestions');
+                if (!response.ok) throw new Error('Failed to load suggestions');
+                
+                const suggestions = await response.json();
+                
+                suggestionsDiv.innerHTML = '';
+                suggestions.forEach(suggestion => {
+                    const btn = document.createElement('button');
+                    btn.className = 'btn btn-outline-secondary btn-sm suggestion-btn';
+                    btn.textContent = suggestion;
+                    btn.onclick = () => {
+                        messageInput.value = suggestion.replace(/[📚🔍😊✍️⭐🐦🧮🔬📖💻🏥🍳✈️🌤️🎵🏃🌍💡🎨📱]/g, '').trim();
+                        sendMessage();
+                    };
+                    suggestionsDiv.appendChild(btn);
+                });
+            } catch (error) {
+                console.log('Could not load suggestions:', error);
+                // Add fallback suggestions
+                const fallbackSuggestions = [
+                    'Tell me about quantum physics',
+                    'Best chocolate cake recipe',
+                    'Recommend science fiction books',
+                    'How to learn Python programming',
+                    'Facts about space exploration'
+                ];
+                
+                fallbackSuggestions.forEach(suggestion => {
+                    const btn = document.createElement('button');
+                    btn.className = 'btn btn-outline-secondary btn-sm suggestion-btn';
+                    btn.textContent = suggestion;
+                    btn.onclick = () => {
+                        messageInput.value = suggestion;
+                        sendMessage();
+                    };
+                    suggestionsDiv.appendChild(btn);
+                });
+            }
+        }
+
+        // Utility functions
+        function scrollToBottom() {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function updateMessageCount() {
+            messageCounter = chatMessages.querySelectorAll('.message').length - 1; // Exclude welcome message
+            messageCount.textContent = `${messageCounter} message${messageCounter !== 1 ? 's' : ''}`;
+        }
+
+        function clearChat() {
+            if (confirm('Are you sure you want to clear the chat history?')) {
+                const welcomeMessage = chatMessages.querySelector('.message');
+                chatMessages.innerHTML = '';
+                chatMessages.appendChild(welcomeMessage);
+                messageCounter = 0;
+                updateMessageCount();
+            }
+        }
+
+        function copyResponse(button) {
+            const messageDiv = button.closest('.message');
+            const textContent = messageDiv.querySelector('br').nextSibling.textContent;
+            
+            navigator.clipboard.writeText(textContent).then(() => {
+                button.innerHTML = '<i class="fas fa-check"></i>';
+                setTimeout(() => {
+                    button.innerHTML = '<i class="fas fa-copy"></i>';
+                }, 2000);
+            }).catch(() => {
+                alert('Could not copy text');
+            });
+        }
+
+        function likeResponse(button) {
+            button.innerHTML = '<i class="fas fa-heart text-danger"></i>';
+            button.disabled = true;
+            
+            // Here you could send feedback to the server
+            console.log('Response liked');
+        }
+
+        // Auto-resize textarea on mobile
+        if (window.innerWidth <= 768) {
+            messageInput.addEventListener('input', function() {
+                this.style.height = 'auto';
+                this.style.height = this.scrollHeight + 'px';
+            });
+        }
+    </script>
+</body>
+</html>
