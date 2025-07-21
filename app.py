@@ -9,6 +9,7 @@ from nltk.corpus import stopwords
 import re
 from dotenv import load_dotenv
 import os
+import nltk
 
 # NEW IMPORTS FOR ENHANCED CHATBOT
 import google.generativeai as genai
@@ -17,9 +18,16 @@ import threading
 import time
 from datetime import datetime
 
+# Download NLTK data if not already present
+try:
+    nltk.data.find('corpora/stopwords')
+except LookupError:
+    nltk.download('stopwords')
+    nltk.download('punkt')
+
 load_dotenv()
 app = Flask(__name__)
-app.secret_key = os.getenv('FLASK_SECRET_KEY', 'gemini_api_key')
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'fallback_secret_key_for_development')
 
 # Firebase Configuration (load from environment variables)
 firebase_config = {
@@ -33,23 +41,48 @@ firebase_config = {
     "databaseURL": os.getenv("FIREBASE_DATABASE_URL", ""),
 }
 
-firebase = pyrebase.initialize_app(firebase_config)
-auth = firebase.auth()
+# Initialize Firebase only if config is available
+firebase = None
+auth = None
+try:
+    if all(firebase_config.values()):
+        firebase = pyrebase.initialize_app(firebase_config)
+        auth = firebase.auth()
+        print("✅ Firebase initialized successfully!")
+    else:
+        print("⚠️ Firebase config incomplete - auth features disabled")
+except Exception as e:
+    print(f"⚠️ Firebase initialization failed: {e}")
 
-# Load models and data
-popular_df = pickle.load(open("BookRecommender/popular.pkl", "rb"))
-pt = pickle.load(open("BookRecommender/pt.pkl", "rb"))
-books = pickle.load(open("BookRecommender/books.pkl", "rb"))
-similarity_scores = pickle.load(open("BookRecommender/similarity_scores.pkl", "rb"))
+# Load models and data with error handling
+try:
+    popular_df = pickle.load(open("BookRecommender/popular.pkl", "rb"))
+    pt = pickle.load(open("BookRecommender/pt.pkl", "rb"))
+    books = pickle.load(open("BookRecommender/books.pkl", "rb"))
+    similarity_scores = pickle.load(open("BookRecommender/similarity_scores.pkl", "rb"))
+    print("✅ Book recommendation models loaded successfully!")
+except Exception as e:
+    print(f"❌ Error loading book models: {e}")
+    # Create dummy data to prevent crashes
+    popular_df = pd.DataFrame()
+    pt = pd.DataFrame()
+    books = pd.DataFrame()
+    similarity_scores = np.array([])
 
 ps = PorterStemmer()
 
 # Fix sentiment_model loading to ensure it is a model object, not a numpy array
+sentiment_model = None
 try:
     import joblib
     sentiment_model = joblib.load("Twitter/sentiment_rf_model.joblib")
+    print("✅ Sentiment model loaded successfully!")
 except Exception:
-    sentiment_model = pickle.load(open("Twitter/sentiment_rf_model.pkl", "rb"))
+    try:
+        sentiment_model = pickle.load(open("Twitter/sentiment_rf_model.pkl", "rb"))
+        print("✅ Sentiment model loaded successfully!")
+    except Exception as e:
+        print(f"❌ Error loading sentiment model: {e}")
 
 # ENHANCED UNIVERSAL CHATBOT CLASS
 class UniversalChatbot:
@@ -114,6 +147,8 @@ class UniversalChatbot:
     def get_book_recommendations(self, query):
         """Get book recommendations based on query"""
         try:
+            if self.books_data.empty:
+                return []
             # Search for books in your dataset
             matching_books = self.books_data[
                 self.books_data['Book-Title'].str.contains(query, case=False, na=False) |
@@ -136,6 +171,8 @@ class UniversalChatbot:
     def get_popular_books(self):
         """Get popular books from your dataset"""
         try:
+            if self.popular_df.empty:
+                return []
             popular_books = []
             for i in range(min(5, len(self.popular_df))):
                 popular_books.append({
@@ -253,28 +290,39 @@ except Exception as e:
     chatbot = None
 
 def stemming(content):
-    stemmed_content = re.sub("[^a-zA-Z]", " ", content)
-    stemmed_content = stemmed_content.lower()
-    stemmed_content = stemmed_content.split()
-    stemmed_content = [
-        ps.stem(word)
-        for word in stemmed_content
-        if word not in stopwords.words("english")
-    ]
-    stemmed_content = " ".join(stemmed_content)
-    return stemmed_content
+    try:
+        stemmed_content = re.sub("[^a-zA-Z]", " ", content)
+        stemmed_content = stemmed_content.lower()
+        stemmed_content = stemmed_content.split()
+        stemmed_content = [
+            ps.stem(word)
+            for word in stemmed_content
+            if word not in stopwords.words("english")
+        ]
+        stemmed_content = " ".join(stemmed_content)
+        return stemmed_content
+    except Exception as e:
+        print(f"Error in stemming: {e}")
+        return content.lower()
 
 # EXISTING ROUTES
 @app.route("/")
 def index():
-    return render_template(
-        "index.html",
-        book_name=list(popular_df["Book-Title"].values),
-        author=list(popular_df["Book-Author"].values),
-        image=list(popular_df["Image-URL-M"].values),
-        votes=list(popular_df["num_rating"].values),
-        rating=list(popular_df["avg_rating"].values),
-    )
+    try:
+        if not popular_df.empty:
+            return render_template(
+                "index.html",
+                book_name=list(popular_df["Book-Title"].values),
+                author=list(popular_df["Book-Author"].values),
+                image=list(popular_df["Image-URL-M"].values),
+                votes=list(popular_df["num_rating"].values),
+                rating=list(popular_df["avg_rating"].values),
+            )
+        else:
+            return render_template("index.html", book_name=[], author=[], image=[], votes=[], rating=[])
+    except Exception as e:
+        print(f"Error in index route: {e}")
+        return render_template("index.html", book_name=[], author=[], image=[], votes=[], rating=[])
 
 @app.route("/recommend")
 def recommend_ui():
@@ -282,34 +330,48 @@ def recommend_ui():
 
 @app.route("/recommend_books", methods=["post"])
 def recommend():
-    user_input = request.form.get("user_input")
-    index = np.where(pt.index == user_input)[0][0]
-    similar_items = sorted(
-        list(enumerate(similarity_scores[index])), key=lambda x: x[1], reverse=True
-    )[1:10]
+    try:
+        user_input = request.form.get("user_input")
+        if pt.empty or books.empty:
+            return render_template("recommend.html", data=[], error="Recommendation system not available")
+            
+        index = np.where(pt.index == user_input)[0][0]
+        similar_items = sorted(
+            list(enumerate(similarity_scores[index])), key=lambda x: x[1], reverse=True
+        )[1:10]
 
-    data = []
-    for i in similar_items:
-        item = []
-        temp_df = books[books["Book-Title"] == pt.index[i[0]]]
-        item.extend(list(temp_df.drop_duplicates("Book-Title")["Book-Title"].values))
-        item.extend(list(temp_df.drop_duplicates("Book-Title")["Book-Author"].values))
-        item.extend(list(temp_df.drop_duplicates("Book-Title")["Image-URL-M"].values))
-        data.append(item)
+        data = []
+        for i in similar_items:
+            item = []
+            temp_df = books[books["Book-Title"] == pt.index[i[0]]]
+            item.extend(list(temp_df.drop_duplicates("Book-Title")["Book-Title"].values))
+            item.extend(list(temp_df.drop_duplicates("Book-Title")["Book-Author"].values))
+            item.extend(list(temp_df.drop_duplicates("Book-Title")["Image-URL-M"].values))
+            data.append(item)
 
-    return render_template("recommend.html", data=data)
+        return render_template("recommend.html", data=data)
+    except Exception as e:
+        print(f"Error in recommend route: {e}")
+        return render_template("recommend.html", data=[], error=f"Error: {str(e)}")
 
 @app.route("/popular")
 def popular():
-    return render_template(
-        "popular.html",
-        book_name=list(popular_df["Book-Title"].values),
-        author=list(popular_df["Book-Author"].values),
-        image=list(popular_df["Image-URL-M"].values),
-        votes=list(popular_df["num_rating"].values),
-        rating=list(popular_df["avg_rating"].values),
-        books=books,
-    )
+    try:
+        if not popular_df.empty:
+            return render_template(
+                "popular.html",
+                book_name=list(popular_df["Book-Title"].values),
+                author=list(popular_df["Book-Author"].values),
+                image=list(popular_df["Image-URL-M"].values),
+                votes=list(popular_df["num_rating"].values),
+                rating=list(popular_df["avg_rating"].values),
+                books=books,
+            )
+        else:
+            return render_template("popular.html", book_name=[], author=[], image=[], votes=[], rating=[], books=[])
+    except Exception as e:
+        print(f"Error in popular route: {e}")
+        return render_template("popular.html", book_name=[], author=[], image=[], votes=[], rating=[], books=[])
 
 @app.route("/contact")
 def contact():
@@ -321,23 +383,38 @@ def twitter_sentiment():
 
 @app.route("/predict_sentiment", methods=["post"])
 def predict_sentiment():
-    tweet_text = request.form.get("tweet_text")
-    processed_tweet = stemming(tweet_text)
-    # Use TextBlob to get sentiment_score
-    sentiment_score = TextBlob(tweet_text).sentiment.polarity
-    input_df = pd.DataFrame(
-        {"stemmed_content": [processed_tweet], "sentiment_score": [sentiment_score]}
-    )
     try:
-        prediction = sentiment_model.predict(input_df)[0]
-        if prediction == 1:
-            sentiment = "Positive"
-        elif prediction == -1:
-            sentiment = "Negative"
+        tweet_text = request.form.get("tweet_text")
+        if not tweet_text:
+            return render_template("twitter_sentiment.html", sentiment="Please enter text", tweet_text="")
+            
+        processed_tweet = stemming(tweet_text)
+        # Use TextBlob to get sentiment_score
+        sentiment_score = TextBlob(tweet_text).sentiment.polarity
+        
+        if sentiment_model is not None:
+            input_df = pd.DataFrame(
+                {"stemmed_content": [processed_tweet], "sentiment_score": [sentiment_score]}
+            )
+            prediction = sentiment_model.predict(input_df)[0]
+            if prediction == 1:
+                sentiment = "Positive"
+            elif prediction == -1:
+                sentiment = "Negative"
+            else:
+                sentiment = "Neutral"
         else:
-            sentiment = "Neutral"
+            # Fallback to TextBlob if model not available
+            if sentiment_score > 0.1:
+                sentiment = "Positive"
+            elif sentiment_score < -0.1:
+                sentiment = "Negative"
+            else:
+                sentiment = "Neutral"
+                
     except Exception as e:
         sentiment = f"Error: {str(e)}"
+        
     return render_template(
         "twitter_sentiment.html", sentiment=sentiment, tweet_text=tweet_text
     )
@@ -405,29 +482,66 @@ def chat_suggestions():
 @app.route("/chat_history")
 def chat_history():
     """Get recent chat history"""
-    if chatbot and hasattr(chatbot, 'conversation_history'):
-        recent_history = chatbot.conversation_history[-10:]  # Last 10 conversations
-        return jsonify(recent_history)
-    return jsonify([])
+    try:
+        if chatbot and hasattr(chatbot, 'conversation_history'):
+            recent_history = chatbot.conversation_history[-10:]  # Last 10 conversations
+            return jsonify(recent_history)
+        return jsonify([])
+    except Exception as e:
+        print(f"Error getting chat history: {e}")
+        return jsonify([])
 
-# EXISTING AUTH ROUTES
+# AUTH ROUTES
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    if not auth:
+        flash("Authentication service unavailable", "warning")
+        return render_template("login.html", is_signup_page=False)
+        
     if request.method == "POST":
-        email = request.form["email"]
-        password = request.form["password"]
+        email = request.form.get("email")
+        password = request.form.get("password")
         try:
             user = auth.sign_in_with_email_and_password(email, password)
             session["user"] = user["idToken"]
-            flash("Login successful!", "success")
-            return redirect(url_for("index"))
-        except Exception:
-            flash("Invalid email or password", "danger")
-            return redirect(url_for("login"))
-    return render_template("login.html")
+            return jsonify({"success": True, "message": "Login successful"})
+        except Exception as e:
+            return jsonify({"success": False, "message": f"Invalid email or password."}), 401
+    return render_template("login.html", is_signup_page=False)
+
+@app.route("/google-login", methods=["POST"])
+def google_login():
+    if not auth:
+        return jsonify({"error": "Authentication service unavailable"}), 503
+        
+    try:
+        # Get the ID token from the request
+        id_token = request.json.get("idToken")
+        if not id_token:
+            return jsonify({"error": "No ID token provided"}), 400
+            
+        # Verify the ID token with Firebase
+        decoded_token = auth.verify_id_token(id_token)
+        
+        # Get user info
+        uid = decoded_token.get("uid")
+        email = decoded_token.get("email")
+        
+        # Store user info in session
+        session["user"] = id_token
+        session["user_email"] = email
+        
+        return jsonify({"success": True, "message": "Google login successful"})
+    except Exception as e:
+        print(f"Google login error: {str(e)}")
+        return jsonify({"error": str(e)}), 401
 
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
+    if not auth:
+        flash("Authentication service unavailable", "warning")
+        return render_template("signup.html", is_signup_page=True)
+        
     if request.method == "POST":
         email = request.form["email"]
         password = request.form["password"]
@@ -435,16 +549,56 @@ def signup():
             auth.create_user_with_email_and_password(email, password)
             flash("Account created successfully! Please login.", "success")
             return redirect(url_for("login"))
-        except Exception:
-            flash("Email already exists.", "danger")
+        except Exception as e:
+            flash(f"Signup failed: {str(e)}", "danger")
             return redirect(url_for("signup"))
-    return render_template("signup.html")
+    return render_template("signup.html", is_signup_page=True)
+
+@app.route("/google-signup", methods=["POST"])
+def google_signup():
+    if not auth:
+        return jsonify({"error": "Authentication service unavailable"}), 503
+        
+    try:
+        # Get the ID token from the request
+        id_token = request.json.get("idToken")
+        if not id_token:
+            return jsonify({"error": "No ID token provided"}), 400
+            
+        # Verify the ID token with Firebase
+        decoded_token = auth.verify_id_token(id_token)
+        
+        # Get user info
+        uid = decoded_token.get("uid")
+        email = decoded_token.get("email")
+        
+        # Store user info in session
+        session["user"] = id_token
+        session["user_email"] = email
+        
+        return jsonify({"success": True, "message": "Google signup successful"})
+    except Exception as e:
+        print(f"Google signup error: {str(e)}")
+        return jsonify({"error": str(e)}), 401
 
 @app.route("/logout")
 def logout():
     session.pop("user", None)
+    session.pop("user_email", None)
     flash("You have been logged out.", "info")
     return redirect(url_for("index"))
 
+# Health check route for Railway
+@app.route("/health")
+def health():
+    return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    # Railway deployment configuration
+    port = int(os.environ.get("PORT", 5000))
+    debug_mode = os.environ.get("FLASK_ENV") == "development"
+    
+    print(f"🚀 Starting Flask app on port {port}")
+    print(f"🔧 Debug mode: {debug_mode}")
+    
+    app.run(host="0.0.0.0", port=port, debug=debug_mode)
