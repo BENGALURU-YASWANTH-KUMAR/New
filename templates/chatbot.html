@@ -498,19 +498,35 @@
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({ message: message })
+                }).catch(error => {
+                    throw new Error('Network error: Please check your internet connection and try again.');
                 });
 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const data = await response.json();
+                const data = await response.json().catch(error => {
+                    throw new Error('Invalid response from server. Please try again.');
+                });
                 
                 // Hide typing indicator
                 showTyping(false);
                 
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        window.location.href = '/login';  // Redirect to login if not authenticated
+                        return;
+                    }
+                    throw new Error(data.error || 
+                        response.status === 503 ? 'Service temporarily unavailable. Please try again later.' :
+                        response.status === 404 ? 'Chat service not found. Please refresh the page.' :
+                        response.status === 429 ? 'Too many requests. Please wait a moment before trying again.' :
+                        `Server error (${response.status}). Please try again.`);
+                }
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
                 // Display bot response
-                addMessage(data.response, 'bot', data.intent);
+                addMessage(data.response, 'bot', data.status === 'error' ? 'error' : 'success');
                 
                 // Handle special context data
                 if (data.context_data && data.context_data.books && data.context_data.books.length > 0) {
@@ -520,7 +536,11 @@
             } catch (error) {
                 console.error('Chat error:', error);
                 showTyping(false);
-                addMessage('❌ Sorry, I encountered an error connecting to the server. Please check your internet connection and try again.', 'bot', 'error');
+                let errorMessage = error.message;
+                if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                    errorMessage = 'Unable to connect to the server. Please check your internet connection.';
+                }
+                addMessage(`❌ ${errorMessage || 'An error occurred. Please try again.'}`, 'bot', 'error');
             } finally {
                 // Re-enable input
                 setInputState(true);
