@@ -28,16 +28,13 @@
             <li><a class="nav-link" href="/recommend">Recommend Books</a></li>
             <li><a class="nav-link" href="/popular">Popular Books</a></li>
             <li><a class="nav-link" href="/twitter_sentiment">Twitter Sentiment</a></li>
-            <li><a class="nav-link" href="/chatbot">Chatbot</a></li>
+            <li><a class="nav-link" href="/chat">Chatbot</a></li>
             <li><a class="nav-link" href="/contact">Contact</a></li>
             {% if 'user' in session %}
                 <li><a class="nav-link" href="/logout">Logout</a></li>
             {% else %}
                 <li><a class="nav-link" href="/login">Login</a></li>
                 <li><a class="nav-link" href="/signup">Sign Up</a></li>
-                
-                <!-- Add this to your navigation -->
-    
             {% endif %}
         </ul>
     </nav>
